@@ -377,6 +377,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                logger.info("register NioServerSocketChannel as an attachment for jdk SelectableChannel into Selector, interestOps is 0 now");
+                //可以注意到，此时 register 的  NioServerSocketChannel 不对任何事情感兴趣
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
@@ -410,7 +412,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         readPending = true;
 
         final int interestOps = selectionKey.interestOps();
+        //在一开始 interestOps 被配置为 0，说明此时不对任何事件感兴趣，因此此时需要修改其感兴趣的事件类型
         if ((interestOps & readInterestOp) == 0) {
+            logger.info("set interestOps from 0 to 16, 16 means readInterestOp");
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

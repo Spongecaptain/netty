@@ -168,7 +168,7 @@ public class LoggingHandler extends ChannelDuplexHandler {
     @Override
     public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "REGISTERED"));
+            //logger.log(internalLevel, format(ctx, "REGISTERED"));
         }
         ctx.fireChannelRegistered();
     }
@@ -184,7 +184,7 @@ public class LoggingHandler extends ChannelDuplexHandler {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "ACTIVE"));
+            //logger.log(internalLevel, format(ctx, "ACTIVE"));
         }
         ctx.fireChannelActive();
     }
@@ -216,7 +216,7 @@ public class LoggingHandler extends ChannelDuplexHandler {
     @Override
     public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "BIND", localAddress));
+            //logger.log(internalLevel, format(ctx, "BIND", localAddress));
         }
         ctx.bind(localAddress, promise);
     }
@@ -258,7 +258,7 @@ public class LoggingHandler extends ChannelDuplexHandler {
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "READ COMPLETE"));
+            //logger.log(internalLevel, format(ctx, "READ COMPLETE"));
         }
         ctx.fireChannelReadComplete();
     }
@@ -266,7 +266,7 @@ public class LoggingHandler extends ChannelDuplexHandler {
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "READ", msg));
+            //logger.log(internalLevel, format(ctx, "READ", msg));
         }
         ctx.fireChannelRead(msg);
     }

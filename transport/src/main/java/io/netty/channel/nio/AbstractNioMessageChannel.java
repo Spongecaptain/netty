@@ -21,6 +21,9 @@ import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
 import java.net.PortUnreachableException;
@@ -34,6 +37,7 @@ import java.util.List;
  */
 public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
     boolean inputShutdown;
+    private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractNioMessageChannel.class);
 
     /**
      * @see AbstractNioChannel#AbstractNioChannel(Channel, SelectableChannel, int)
@@ -82,7 +86,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                         }
 
                         allocHandle.incMessagesRead(localRead);
-                    } while (allocHandle.continueReading());
+                    } while (allocHandle.continueReading());//是否继续读，注意，创建连接时这个逻辑总是返回 false
                 } catch (Throwable t) {
                     exception = t;
                 }
@@ -90,6 +94,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    logger.info("fire the NioSocketChannel in the readBuf in the pipeline");
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
                 readBuf.clear();

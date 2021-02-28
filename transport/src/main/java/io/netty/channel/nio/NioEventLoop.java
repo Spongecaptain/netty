@@ -139,6 +139,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 rejectedExecutionHandler);
         this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
+        logger.info("<init> method");
         final SelectorTuple selectorTuple = openSelector();
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;
@@ -170,6 +171,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private SelectorTuple openSelector() {
         final Selector unwrappedSelector;
         try {
+            logger.info("get a selector depend on OS Type: " +provider);
             unwrappedSelector = provider.openSelector();
         } catch (IOException e) {
             throw new ChannelException("failed to open a new selector", e);
@@ -572,9 +574,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKeys() {
-        if (selectedKeys != null) {
+        //在事件触发后，存在两种处理 SelectedKeys 的方式：JDK 原生版本/Netty 优化版本
+        if (selectedKeys != null) {//Netty 优化版本
             processSelectedKeysOptimized();
-        } else {
+        } else {//JDK 原生版本
             processSelectedKeysPlain(selector.selectedKeys());
         }
     }
@@ -643,10 +646,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // null out entry in the array to allow to have it GC'ed once the Channel close
             // See https://github.com/netty/netty/issues/2363
             selectedKeys.keys[i] = null;
-
+            logger.info("get Attachment from JDK SelectionKey, aka NioServerSocketChannel or NioSocketChannel");
             final Object a = k.attachment();
 
-            if (a instanceof AbstractNioChannel) {
+            if (a instanceof AbstractNioChannel) {//连接处理、可读事件都会走这条逻辑链
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -689,6 +692,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         try {
+            //得到 NioServerSocketChannel/NioSocketChannel 的兴趣（当然是以 NIO 模式下的 Netty 使用为例子）
             int readyOps = k.readyOps();
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
@@ -710,7 +714,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+            // 处理新连接请求(断开连接)
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
+                logger.info("get one OP_READ or OP_ACCEPT Event");
                 unsafe.read();
             }
         } catch (CancelledKeyException ignored) {

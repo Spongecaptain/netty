@@ -1331,6 +1331,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         @Override
         public void bind(
                 ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
+            logger.info("bind the NioSocketChannel to localAddress by headContext");
             unsafe.bind(localAddress, promise);
         }
 

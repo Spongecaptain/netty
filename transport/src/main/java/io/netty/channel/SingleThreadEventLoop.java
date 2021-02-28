@@ -78,12 +78,14 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
 
     @Override
     public ChannelFuture register(Channel channel) {
+        //通常 BossGroup 会配置为单线程，因此会走到这个逻辑上
         return register(new DefaultChannelPromise(channel, this));
     }
 
     @Override
     public ChannelFuture register(final ChannelPromise promise) {
         ObjectUtil.checkNotNull(promise, "promise");
+        //利用 Channel.Unsafe.register 方法注册 NioServerSocketChannel
         promise.channel().unsafe().register(this, promise);
         return promise;
     }

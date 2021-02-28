@@ -15,6 +15,9 @@
  */
 package io.netty.util.internal;
 
+import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
+
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -44,6 +47,7 @@ import java.util.Enumeration;
 public final class SocketUtils {
 
     private static final Enumeration<Object> EMPTY = Collections.enumeration(Collections.emptyList());
+    private static final InternalLogger logger = InternalLoggerFactory.getInstance(SocketUtils.class);
 
     private SocketUtils() {
     }
@@ -116,6 +120,7 @@ public final class SocketUtils {
             return AccessController.doPrivileged(new PrivilegedExceptionAction<SocketChannel>() {
                 @Override
                 public SocketChannel run() throws IOException {
+                    logger.info("create a new jdk SocketChannel");
                     return serverSocketChannel.accept();
                 }
             });

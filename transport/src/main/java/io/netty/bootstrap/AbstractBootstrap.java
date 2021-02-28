@@ -33,6 +33,7 @@ import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
+import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -55,7 +56,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     static final Map.Entry<ChannelOption<?>, Object>[] EMPTY_OPTION_ARRAY = new Map.Entry[0];
     @SuppressWarnings("unchecked")
     static final Map.Entry<AttributeKey<?>, Object>[] EMPTY_ATTRIBUTE_ARRAY = new Map.Entry[0];
-
+    private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractBootstrap.class);
     volatile EventLoopGroup group;
     @SuppressWarnings("deprecation")
     private volatile ChannelFactory<? extends C> channelFactory;
@@ -269,15 +270,18 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        logger.warn("new, then init a NioServerSocketChannel, then registry NioServerSocketChannel into Selector");
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
             return regFuture;
         }
-
+        //由于 NioServerSocketChannel Registry 是一个异步操作，因此运行到这里注册操作不一定已经完成，两种状态对应于下面两个逻辑分支
+        //完成直接进行 bind 操作，未完成则将此任务封装为一个异步监听器来供完成后回调
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
+            logger.warn("bind NioServerSocketChannel to localAddress synchronously");//这个 if/else 分支只会选择一个执行
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
@@ -295,7 +299,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                         // Registration was successful, so set the correct executor to use.
                         // See https://github.com/netty/netty/issues/2586
                         promise.registered();
-
+                        logger.warn("bind NioServerSocketChannel to localAddress asynchronously");//这个 if/else 分支只会选择一个执行
                         doBind0(regFuture, channel, localAddress, promise);
                     }
                 }
@@ -307,7 +311,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            //1. new NioServerSocketChannel 实例，方式是：泛型+反射+工厂
+            logger.info("new NioServerSocketChannel by genericity & reflection & factory");
             channel = channelFactory.newChannel();
+            //2. init NioServerSocketChannel，工作包括：配置一个 pipeline、初始化属性字段、TCP 配置
+            logger.info("init NioServerSocketChannel by matching a pipeline&adding the configuration fields...");
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -319,7 +327,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
-
+        //3. registry NioServerSocketChannel into selector 由于一个 EventLoop（BossGroup 的 Group 可以省略）
+        // 负责一个 Selector，所以这里也可以说将 Channel 注册到 EventLoop 中
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -352,7 +361,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {
+                //判断是否有 NioServerSocketChannel 注册到 Selector 上成功，如果没有走 else，不进行绑定
                 if (regFuture.isSuccess()) {
+                    //开始 bind
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
                     promise.setFailure(regFuture.cause());

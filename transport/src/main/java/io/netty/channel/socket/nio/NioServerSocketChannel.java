@@ -59,6 +59,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
              */
+            logger.info("get a ServerSocketChannel from "+provider);
             return provider.openServerSocketChannel();
         } catch (IOException e) {
             throw new ChannelException(
@@ -131,6 +132,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
         if (PlatformDependent.javaVersion() >= 7) {
+            logger.info("bind jdk Channel to localAddress by invoke ServerSocketChannel#bind method");
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
             javaChannel().socket().bind(localAddress, config.getBacklog());
@@ -148,12 +150,12 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
         try {
             if (ch != null) {
+                logger.info("use Netty NioSocketChannel wrap jdk SocketChannel, then add it into List<Object> buf");
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }
         } catch (Throwable t) {
             logger.warn("Failed to create a new channel from an accepted socket.", t);
-
             try {
                 ch.close();
             } catch (Throwable t2) {

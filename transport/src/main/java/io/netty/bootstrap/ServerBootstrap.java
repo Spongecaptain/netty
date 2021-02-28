@@ -208,13 +208,15 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
             final Channel child = (Channel) msg;
-
+            logger.info("init the pipeline of Child Channel, set options for Child Channel & add attributes into Child Channel");
             child.pipeline().addLast(childHandler);
 
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
+                logger.info("register NioSocketChannel into childGroup");
+                logger.warn("bossGroup is done with new TCP connection request, others are workerGroup's work");
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
