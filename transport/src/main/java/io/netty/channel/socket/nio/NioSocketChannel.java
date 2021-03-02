@@ -366,10 +366,12 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
         // By default we track the SO_SNDBUF when ever it is explicitly set. However some OSes may dynamically change
         // SO_SNDBUF (and other characteristics that determine how much data can be written at once) so we should try
         // make a best effort to adjust as OS behavior changes.
+        // 一次写完了那么就扩大一下 maxBytesPerGatheringWrite 的配置，显然是扩大两倍
         if (attempted == written) {
             if (attempted << 1 > oldMaxBytesPerGatheringWrite) {
                 ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted << 1);
             }
+        // 一次没写完，那么就减小 maxBytesPerGatheringWrite 的配置，显然是缩小到 1/2
         } else if (attempted > MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD && written < attempted >>> 1) {
             ((NioSocketChannelConfig) config).setMaxBytesPerGatheringWrite(attempted >>> 1);
         }
@@ -378,33 +380,44 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         SocketChannel ch = javaChannel();
+        //有数据要写，且能写入，这最多尝试 16 次
         int writeSpinCount = config().getWriteSpinCount();
         do {
+            //注意，这里的 in 可不是 InputStream 而是 ChannelOutboundBuffer
+            //判断是否写完
             if (in.isEmpty()) {
                 // All written so clear OP_WRITE
+                //写完的话就要清除掉所有的 OP_WRITE 兴趣，避免没有意义的事件通知
                 clearOpWrite();
                 // Directly return here so incompleteWrite(...) is not called.
                 return;
             }
 
             // Ensure the pending writes are made of ByteBufs only.
+            // 更新 maxBytesPerGatheringWrite 的值，用于批量写的效率最优化
             int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+            // 批量将 ByteBuffer 进行写操作，这里自然得到一个 ByteBuffer[] 数组实例，即一批 ByteBuffer
+            // 这里 1024 代表 ByteBuffer[] 数组的最多元素个数，而 maxBytesPerGatheringWrite 代表 ByteBuffer[] 数组的最大字节数量
             ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+            // nioBufferCnt 0 代表此次不需要写，1 代表仅仅写一个 ByteBuffer，>1 代表一次性写批量的 ByteBuffer 数据
             int nioBufferCnt = in.nioBufferCount();
 
             // Always use nioBuffers() to workaround data-corruption.
             // See https://github.com/netty/netty/issues/2761
             switch (nioBufferCnt) {
+                //不用写
                 case 0:
                     // We have something else beside ByteBuffers to write so fallback to normal writes.
                     writeSpinCount -= doWrite0(in);
                     break;
+                //写一个 ByteBuffer
                 case 1: {
                     // Only one ByteBuf so use non-gathering write
                     // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
                     // to check if the total size of all the buffers is non-zero.
                     ByteBuffer buffer = nioBuffers[0];
                     int attemptedBytes = buffer.remaining();
+                    //写一个 ByteBuffer 实际上是直接通过 jdk SocketChannel#write 方法进行写
                     final int localWrittenBytes = ch.write(buffer);
                     if (localWrittenBytes <= 0) {
                         incompleteWrite(true);
@@ -415,26 +428,33 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
                     --writeSpinCount;
                     break;
                 }
+                //写多个 ByteBuffer
                 default: {
                     // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
                     // to check if the total size of all the buffers is non-zero.
                     // We limit the max amount to int above so cast is safe
                     long attemptedBytes = in.nioBufferSize();
+                    //批量写入，这也是 JDK SocketChannel 提供的 API
                     final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
                     if (localWrittenBytes <= 0) {
+                        //如果内核空间的 Socket Buffer 数据已经装满了，那么就无法继续写入，localWrittenBytes 方法此时为 0
+                        //这里的对应的策略是为 SocketChannel 注册一个 OP_WRITE 兴趣
                         incompleteWrite(true);
                         return;
                     }
                     // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
+                    // 这里则是进行调整批量写入的数据量大小配置
                     adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes,
                             maxBytesPerGatheringWrite);
+                    //清理写完的 ByteBuffer，如果尚有 ByteBuffer 未写完，则标记一下
                     in.removeBytes(localWrittenBytes);
+                    //减少一下写的次数
                     --writeSpinCount;
                     break;
                 }
             }
         } while (writeSpinCount > 0);
-
+        //如果在 writeSpinCount 次数都用完的情况下，还没有写完，那么此时 writeSpinCount 为 0，因此仅仅会注册一个 flush Task 进行 flush 操作
         incompleteWrite(writeSpinCount < 0);
     }
 

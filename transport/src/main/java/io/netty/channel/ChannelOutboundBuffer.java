@@ -112,7 +112,9 @@ public final class ChannelOutboundBuffer {
      * the message was written.
      */
     public void addMessage(Object msg, int size, ChannelPromise promise) {
+        //将 msg 等字段封装为一个链表元素，方便加入到链表
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
+        //简单地将 Entry 加入到链表尾部
         if (tailEntry == null) {
             flushedEntry = null;
         } else {
@@ -126,6 +128,7 @@ public final class ChannelOutboundBuffer {
 
         // increment pending bytes after adding message to the unflushed arrays.
         // See https://github.com/netty/netty/issues/1619
+        // 这用于更新 ChannelOutboundBuffer 中的数据大小，这个参数将服务于 ChannelOutboundBuffer 的高水位检查
         incrementPendingOutboundBytes(entry.pendingSize, false);
     }
 
@@ -350,6 +353,7 @@ public final class ChannelOutboundBuffer {
                     writtenBytes -= readableBytes;
                 }
                 remove();
+                //如果数据尚未写完，那么就需要标记一下，下次发生 OP_WRITE 时继续进行尝试写
             } else { // readableBytes > writtenBytes
                 if (writtenBytes != 0) {
                     buf.readerIndex(readerIndex + (int) writtenBytes);
@@ -358,6 +362,7 @@ public final class ChannelOutboundBuffer {
                 break;
             }
         }
+        //清理写完的 ByteBuffer
         clearNioBuffers();
     }
 

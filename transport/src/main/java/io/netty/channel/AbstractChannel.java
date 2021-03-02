@@ -853,11 +853,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        //这里结束事件传播，进行真正的写操作
         @Override
         public final void write(Object msg, ChannelPromise promise) {
             assertEventLoop();
-
+            //得到与 Channel 内部的 ChannelOutboundBuffer 实例
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+            //检查是否 Channel 已经关闭
             if (outboundBuffer == null) {
                 // If the outboundBuffer is null we know the channel was closed and so
                 // need to fail the future right away. If it is not null the handling of the rest
@@ -871,8 +873,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             int size;
             try {
+                //根据操作系统处理一些 ByteBuf
                 msg = filterOutboundMessage(msg);
+                //计算一下 ByteBuf 的大小
                 size = pipeline.estimatorHandle().size(msg);
+                //为什么可以为负数？
                 if (size < 0) {
                     size = 0;
                 }
@@ -881,7 +886,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 ReferenceCountUtil.release(msg);
                 return;
             }
-
+            //将待发送的消息加入到 ChannelOutboundBuffer 中
             outboundBuffer.addMessage(msg, size, promise);
         }
 

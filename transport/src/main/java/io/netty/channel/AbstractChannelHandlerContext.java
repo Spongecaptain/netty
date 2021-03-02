@@ -767,7 +767,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             writeAndFlush(msg, promise);
         }
     }
-
+    //Netty 写操作的入口
     private void write(Object msg, boolean flush, ChannelPromise promise) {
         ObjectUtil.checkNotNull(msg, "msg");
         try {
@@ -780,14 +780,16 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             ReferenceCountUtil.release(msg);
             throw e;
         }
-
+        //Pipeline 内的读事件向前传播
         final AbstractChannelHandlerContext next = findContextOutbound(flush ?
                 (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
+            //write&flush
             if (flush) {
                 next.invokeWriteAndFlush(m, promise);
+                //just write
             } else {
                 next.invokeWrite(m, promise);
             }
