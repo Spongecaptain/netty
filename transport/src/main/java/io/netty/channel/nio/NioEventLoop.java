@@ -690,35 +690,40 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
             return;
         }
-
         try {
-            //得到 NioServerSocketChannel/NioSocketChannel 的兴趣（当然是以 NIO 模式下的 Netty 使用为例子）
+            //得到 NioServerSocketChannel/NioSocketChannel 的发生的兴趣事件，这在 JDK 中被称为 readyOps
+            //OP 被设置为一个 int 数值，1、4、8、16，如果与运算  OP_?&readyOps 不为零，说明发生了 OP_?对应的事件
             int readyOps = k.readyOps();
             // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
             // the NIO JDK channel implementation may throw a NotYetConnectedException.
+            // 发生一个连接完成事件（这通常在客户端发生），正如注解所说，JDK 要求处理这个事件的方式是调用 finishConnect 方法，直接调用 write/read 方法会抛出异常
             if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
+                // 这显然是一个 Netty 早期 BUG，连接完成时间达成后还需要取消 SocketChannel 对 OP_CONNECT 事件的兴趣，否则会导致空轮询，最终导致 High CPU usage
                 // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
                 // See https://github.com/netty/netty/issues/924
                 int ops = k.interestOps();
+                //取消 OP_CONNECT 兴趣
                 ops &= ~SelectionKey.OP_CONNECT;
                 k.interestOps(ops);
-
+                //调用 finishConnect 方法
                 unsafe.finishConnect();
             }
-
+            // OP_WRITE 事件会发生在 Server&Client，通常意味着 SocketChannel 在内核空间中的 Buffer 不够使用，用户空间中的 ByteBuf 数据没能完全写入
             // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
             if ((readyOps & SelectionKey.OP_WRITE) != 0) {
+                // 处理 OP_WRITE 事件的策略也很简单，就是尝试将用户空间中的 ByteBuf 中的字节数据继续尝试刷新
                 // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
                 ch.unsafe().forceFlush();
             }
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
-            // 处理新连接请求(断开连接)
+            // OP_READ & OP_ACCEPT 的事件处理，这在 Netty 中都被认为是读事件
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 logger.info("get one OP_READ or OP_ACCEPT Event");
                 unsafe.read();
             }
+           //最后，如果发生异常那么就关闭此连接。可以注意到，这个异常为 SelectionKey 被取消导致的异常，类似于中断
         } catch (CancelledKeyException ignored) {
             unsafe.close(unsafe.voidPromise());
         }
